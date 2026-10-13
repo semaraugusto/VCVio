@@ -19,3 +19,12 @@ jobs:
       with:
         do-release: true
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # A release created with `GITHUB_TOKEN` triggers no other workflow, so attach the olean
+  # archives by calling the release workflow directly.
+  oleans:
+    name: Attach olean archives
+    needs: lean-release-tag
+    uses: ./.github/workflows/release-oleans.yml
+    permissions:
+      contents: write

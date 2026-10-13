@@ -22,6 +22,11 @@ computations, probability semantics, program logic, and lattice- and hash-based 
     -- diacritics (e.g. `Cătălin Hriţcu`).
     ⟨`weak.linter.unicodeLinter, false⟩
   ]
+  -- A downstream `require` of a tagged commit downloads that tag's prebuilt `.lake/build`
+  -- archive (`lake pack`) instead of compiling; `.github/workflows/release-oleans.yml`
+  -- publishes the archives.
+  releaseRepo := "https://github.com/Verified-zkEVM/VCVio"
+  preferReleaseBuild := true
 
 /-- Run Mathlib's source-style checks and Batteries' environment linters, with an exact
 exception baseline. The Python coordinator invokes the upstream executables through Lake;

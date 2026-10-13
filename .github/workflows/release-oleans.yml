@@ -1,0 +1,133 @@
+name: Release oleans
+
+# Publishes `lake pack` archives of VCVio's `.lake/build` on a GitHub release. A downstream
+# `require` of a tagged commit downloads the archive for its platform instead of compiling, because
+# `lakefile.lean` sets `preferReleaseBuild` and `releaseRepo`. Lake looks the tag up with
+# `git describe --tags --exact-match HEAD` and fetches
+# `<releaseRepo>/releases/download/<tag>/VCVio-<target triple>.tar.gz`.
+on:
+  # Nightly prerelease of `main`.
+  schedule:
+    - cron: "0 4 * * *"
+  # On-demand prerelease of `main`, or a retry for a commit that is already tagged.
+  workflow_dispatch:
+  # Called by `release-tag.yml` after a toolchain bump tags `main`.
+  workflow_call:
+
+permissions:
+  contents: read
+
+# A second run waits, then finds HEAD tagged and reuses that tag rather than adding another.
+concurrency:
+  group: release-oleans
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Choose release tag
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      skip: ${{ steps.tag.outputs.skip }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Reuse a tag already on HEAD: `git describe` reports only one of several tags on a commit,
+      # so a second tag could hide the archive from Lake. A nightly run skips a HEAD whose tag
+      # already carries archives, i.e. `main` has not moved since the last release.
+      - id: tag
+        run: |
+          skip=false
+          if tag=$(git describe --tags --exact-match HEAD); then
+            assets=$(gh release view "$tag" --json assets -q '.assets | length' || echo 0)
+            if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$assets" != 0 ]; then skip=true; fi
+          elif [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            tag="nightly-$(date -u +%Y.%m.%d)-$(git rev-parse --short HEAD)"
+          else
+            tag="build-$(git rev-parse --short HEAD)"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Pack oleans (${{ matrix.os }})
+    needs: tag
+    if: needs.tag.outputs.skip != 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      LIBS: ToMathlib VCVio VCVioCslib LatticeCrypto Extern HashSig Examples VCVioWidgets
+    steps:
+      # No submodules, and no restored VCVio build: the archive holds exactly the oleans a
+      # downstream checkout (which never has `third_party/`) would build, and no test oleans,
+      # executables or native objects.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Restore only, with `build.yml`'s key: on Linux this reuses the dependencies `main` built;
+      # on macOS it misses, and nothing is saved, so the Linux caches keep the quota.
+      - name: Restore dependency cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/packages
+            !.lake/packages/**/*.setup.json
+          key: lake-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+          restore-keys: |
+            lake-deps-${{ runner.os }}-${{ runner.arch }}-
+      - name: Set up Lean environment
+        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1
+        with:
+          auto-config: false
+          build: false
+          test: false
+          lint: false
+          use-github-cache: false
+          use-mathlib-cache: false
+      - name: Fetch Mathlib cache
+        run: lake exe cache get
+      - name: Build libraries
+        run: lake build $LIBS
+      - name: Pack build directory
+        run: lake pack
+      # The archive alone must be a complete, up-to-date build of every library.
+      - name: Check the archive round-trips
+        run: |
+          rm -rf .lake/build
+          lake unpack
+          lake build --no-build $LIBS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oleans-${{ matrix.os }}
+          path: .lake/VCVio-*.tar.gz
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Publishes only after every platform built, so a release never carries a partial set.
+  publish:
+    name: Publish release assets
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.tag.outputs.tag }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: oleans-*
+          path: dist
+          merge-multiple: true
+      - name: Upload archives to the release
+        run: |
+          gh release view "$TAG" ||
+            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "$TAG" \
+              --notes "Prebuilt oleans of $GITHUB_SHA for Lake's \`preferReleaseBuild\` download."
+          gh release upload "$TAG" dist/VCVio-*.tar.gz --clobber
