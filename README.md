@@ -47,8 +47,8 @@ unless they call VCVio's native FFI symbols; to enable the real backends, run
 rebuild. (In this repository itself the same command at the repo root enables the
 native test executables, which `lake test -- --ffi` then builds and runs.)
 
-Tagged commits come with prebuilt oleans. Every toolchain release (`v4.x.y`) and every nightly
-prerelease of `main` (`nightly-YYYY.MM.DD-<sha>`) on the
+Tagged commits come with prebuilt oleans. Every toolchain release (e.g. `v4.34.0`) and every
+nightly prerelease of `main` (`nightly-YYYY.MM.DD-<sha>`) on the
 [Releases](https://github.com/Verified-zkEVM/VCVio/releases) page carries `lake pack` archives
 of VCVio's build for Linux x86_64 and macOS arm64. When the `rev` of your requirement is such a
 tag, Lake downloads the archive instead of compiling VCVio:
