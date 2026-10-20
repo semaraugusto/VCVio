@@ -153,6 +153,11 @@ The toolchain and Mathlib move together, and the other pins follow them. The ord
    checked against the newly pinned trees, never diffed against the previous ledger.
 6. Update the version mentions in `AGENTS.md` (*Building*) and `docs/agents/gotchas.md` §26.
 
+Merging the bump tags the commit with the toolchain version (`release-tag.yml`), and
+`release-oleans.yml` then attaches the prebuilt olean archives that downstream `require`s of
+that tag download. If that run fails, rerun **Release oleans** from the Actions tab on `main`:
+a run on an already-tagged commit reuses its tag.
+
 ## Style Notes
 
 - Keep imports at the top of the file.

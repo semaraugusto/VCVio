@@ -47,6 +47,27 @@ unless they call VCVio's native FFI symbols; to enable the real backends, run
 rebuild. (In this repository itself the same command at the repo root enables the
 native test executables, which `lake test -- --ffi` then builds and runs.)
 
+Tagged commits come with prebuilt oleans. Every toolchain release (e.g. `v4.34.0`) and every
+nightly prerelease of `main` (`nightly-YYYY.MM.DD-<sha>`) on the
+[Releases](https://github.com/Verified-zkEVM/VCVio/releases) page carries `lake pack` archives
+of VCVio's build for Linux x86_64 and macOS arm64. When the `rev` of your requirement is such a
+tag, Lake downloads the archive instead of compiling VCVio:
+
+```toml
+[[require]]
+name = "VCVio"
+git = "https://github.com/Verified-zkEVM/VCVio"
+rev = "<release tag>"
+```
+
+The downloaded oleans are only reused when your project builds with VCVio's `lean-toolchain` and
+the Mathlib and PolyFun revisions in VCVio's `lake-manifest.json` (fetch Mathlib's own cache with
+`lake exe cache get`); otherwise Lake rebuilds VCVio. PolyFun is still compiled from source. Lake
+downloads only into an empty build directory, so after changing the VCVio `rev`, run
+`rm -rf .lake/packages/VCVio/.lake/build` before `lake build`. The warning `building from source;
+failed to fetch GitHub release` means the pinned commit is untagged or its release has no archive
+for your platform.
+
 Mathematical foundations such as probability theory, computational complexity, and algebraic structures are based on or written to the Mathlib project (see [MATHLIB4](REFERENCES.md#mathlib4)), making all of that library usable in constructions and proofs.
 
 The project aims to enable proof effort comparable to that found in Mathlib. It is particularly
